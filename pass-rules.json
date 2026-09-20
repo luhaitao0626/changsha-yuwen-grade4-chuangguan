@@ -1,0 +1,8 @@
+{
+  "passRatio": 0.8,
+  "questionsPerLevel": 8,
+  "wrongBook": true,
+  "excludeOptionalFromMain": true,
+  "minCorrect": 7,
+  "passNote": "至少答对7/8题过关（80%向上取整）"
+}
