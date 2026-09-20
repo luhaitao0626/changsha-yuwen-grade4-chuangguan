@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>长沙小学语文四年级上册 · 学习知识闯关</title>
+<style>
+  :root { --bg:#fff7e8; --card:#fff; --ink:#2b2b2b; --pri:#ff8a3d; --ok:#2f9e44; --bad:#e03131; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "PingFang SC","Microsoft YaHei",sans-serif; background:linear-gradient(180deg,#ffe8c2,#fff7e8 40%); color:var(--ink); min-height:100vh; }
+  header { padding:20px 16px 8px; text-align:center; }
+  h1 { margin:0; font-size:1.35rem; }
+  .sub { color:#876; font-size:.9rem; margin-top:6px; }
+  nav.tabs { display:flex; gap:8px; justify-content:center; margin:12px 0 8px; }
+  nav.tabs button { border:0; background:#fff; padding:10px 16px; border-radius:999px; font-weight:600; cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+  nav.tabs button.active { background:var(--pri); color:#fff; }
+  main { max-width:720px; margin:0 auto; padding:12px 16px 40px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .level { background:var(--card); border-radius:16px; padding:16px; box-shadow:0 4px 14px rgba(255,138,61,.15); cursor:pointer; border:2px solid transparent; }
+  .level.locked { opacity:.55; cursor:not-allowed; filter:grayscale(.3); }
+  .level.cleared { border-color:#8ce99a; }
+  .level .num { font-size:.8rem; color:var(--pri); font-weight:700; }
+  .level h3 { margin:6px 0 0; font-size:1rem; }
+  .badge { display:inline-block; margin-top:8px; font-size:.75rem; padding:2px 8px; border-radius:999px; background:#fff0e0; }
+  .quiz, .result, .book { background:var(--card); border-radius:18px; padding:18px; box-shadow:0 6px 20px rgba(0,0,0,.06); }
+  .stem { font-size:1.05rem; line-height:1.55; margin:8px 0 14px; font-weight:600; }
+  .opt { display:block; width:100%; text-align:left; margin:8px 0; padding:12px 14px; border-radius:12px; border:2px solid #ffe0c2; background:#fffaf3; cursor:pointer; font-size:1rem; }
+  .opt.selected { border-color:var(--pri); background:#ffe8d2; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  button.primary { background:var(--pri); color:#fff; border:0; padding:12px 18px; border-radius:12px; font-weight:700; cursor:pointer; }
+  button.ghost { background:#fff; border:1px solid #ffd8a8; padding:12px 18px; border-radius:12px; cursor:pointer; }
+  .progress { color:#876; font-size:.9rem; }
+  .pass { color:var(--ok); font-size:1.4rem; font-weight:800; }
+  .fail { color:var(--bad); font-size:1.4rem; font-weight:800; }
+  .hidden { display:none !important; }
+  .meta { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>学习知识闯关</h1>
+  <div class="sub">长沙小学语文 · 四年级上册 · 答对至少 7/8 过关</div>
+  <nav class="tabs">
+    <button id="tabMap" class="active" type="button">关卡地图</button>
+    <button id="tabBook" type="button">错题本 <span id="bookCount"></span></button>
+  </nav>
+</header>
+<main>
+  <section id="mapView" class="grid"></section>
+  <section id="quizView" class="quiz hidden"></section>
+  <section id="resultView" class="result hidden"></section>
+  <section id="bookView" class="book hidden"></section>
+</main>
+<script>
+const $ = (id)=>document.getElementById(id);
+let levels=[], quiz=[], answers={}, qi=0, mode='level', book=[];
+async function api(path, opts){ const r = await fetch(path, opts); return r.json(); }
+function show(id){ ['mapView','quizView','resultView','bookView'].forEach(x=>$(x).classList.add('hidden')); $(id).classList.remove('hidden'); }
+
+async function loadMap(){
+  levels = await api('/api/levels');
+  const prog = await api('/api/progress');
+  $('bookCount').textContent = prog.wrongBookCount ? `(${prog.wrongBookCount})` : '';
+  const map = $('mapView'); map.innerHTML = '';
+  levels.forEach(lv=>{
+    const div = document.createElement('div');
+    div.className = 'level' + (lv.unlocked?'':' locked') + (lv.cleared?' cleared':'');
+    div.innerHTML = `<div class="num">第 ${lv.levelId} 关</div><h3>${lv.title}</h3><span class="badge">${lv.cleared?'已通关':(lv.unlocked?'可挑战':'未解锁')}</span>`;
+    if(lv.unlocked) div.onclick = ()=>startLevel(lv.levelId, lv.title);
+    map.appendChild(div);
+  });
+  show('mapView'); $('tabMap').classList.add('active'); $('tabBook').classList.remove('active');
+}
+
+async function startLevel(id, title){
+  mode='level'; answers={}; qi=0; window._levelId=id; window._levelTitle=title;
+  quiz = await api('/api/levels/'+id+'/questions');
+  renderQuiz();
+}
+
+function renderQuiz(){
+  const q = quiz[qi];
+  const view = $('quizView');
+  const title = mode==='book' ? '错题本练习' : window._levelTitle;
+  view.innerHTML = `<div class="meta"><strong>${title}</strong><span class="progress">${qi+1} / ${quiz.length}</span></div>
+    <div class="stem">${q.stem}</div><div id="opts"></div>
+    <div class="row">
+      <button class="ghost" type="button" id="prevBtn" ${qi===0?'disabled':''}>上一题</button>
+      <button class="ghost" type="button" id="nextBtn">${qi===quiz.length-1?'去提交':'下一题'}</button>
+      <button class="primary" type="button" id="submitBtn">提交答案</button>
+    </div>`;
+  const opts = $('opts');
+  q.options.forEach((t,i)=>{
+    const b = document.createElement('button');
+    b.type='button'; b.className='opt'+(answers[q.id]===i?' selected':'');
+    b.textContent = String.fromCharCode(65+i)+'. '+t;
+    b.onclick=()=>{ answers[q.id]=i; renderQuiz(); };
+    opts.appendChild(b);
+  });
+  $('prevBtn').onclick=()=>{ qi=Math.max(0,qi-1); renderQuiz(); };
+  $('nextBtn').onclick=()=>{ if(qi<quiz.length-1){ qi++; renderQuiz(); } else $('submitBtn').click(); };
+  $('submitBtn').onclick=submitQuiz;
+  show('quizView');
+}
+
+async function submitQuiz(){
+  if(Object.keys(answers).length < quiz.length){ alert('还有题目没答完哦'); return; }
+  if(mode==='book'){
+    const res = await api('/api/wrong-book/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers})});
+    $('resultView').innerHTML = `<div class="pass">错题复习完成</div><p>清除 ${(res.cleared||[]).length} 题，仍保留 ${(res.remaining||[]).length} 题。</p><div class="row"><button class="primary" id="backMap">回地图</button><button class="ghost" id="backBook">看错题本</button></div>`;
+    show('resultView'); $('backMap').onclick=loadMap; $('backBook').onclick=loadBook; return;
+  }
+  const res = await api('/api/levels/'+window._levelId+'/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers})});
+  $('resultView').innerHTML = `<div class="${res.passed?'pass':'fail'}">${res.passed?'通关成功！':'再试一次'}</div>
+    <p>答对 ${res.correct}/${res.total}（需 ≥7 才能过关）</p>
+    <div class="row"><button class="primary" id="backMap">回地图</button></div>`;
+  show('resultView'); $('backMap').onclick=loadMap;
+}
+
+async function loadBook(){
+  book = await api('/api/wrong-book');
+  $('tabBook').classList.add('active'); $('tabMap').classList.remove('active');
+  if(!book.length){ $('bookView').innerHTML='<p>错题本是空的，真棒！</p><button class="primary" id="bm">回地图</button>'; $('bm').onclick=loadMap; show('bookView'); return; }
+  $('bookView').innerHTML = `<p>共 ${book.length} 道错题，点下面开始重练。</p><button class="primary" id="startBook">开始重练</button>`;
+  $('startBook').onclick=()=>{ mode='book'; quiz=book; answers={}; qi=0; renderQuiz(); };
+  show('bookView');
+}
+$('tabMap').onclick=loadMap; $('tabBook').onclick=loadBook; loadMap();
+</script>
+</body>
+</html>
